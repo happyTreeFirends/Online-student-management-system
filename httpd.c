@@ -14,9 +14,9 @@
 #include<sys/sendfile.h>
 #include<sys/sendfile.h>
 
-
 #define MAX 1024
 #define HOME_PAGE "index.html"
+#define PAGE_404 "wwwroot/404.html"
 
 static void usage(const char *proc)   // zai ben han shu nei bu you xiao
 {
@@ -61,12 +61,37 @@ void clearHeader(int sock)
 	}while(strcmp(line,"\n")!=0);
 }
 
+void show_404(int sock){
+		char line[1024];
+		sprintf(line,"HTTP/1.0 404 Not Found\r\n");
+		send(sock,line,strlen(line),0);
+		sprintf(line,"Content-Type:text/html;charset=ISO-8859-1\r\n");
+		send(sock,line,strlen(line),0);
+		sprintf(line,"\r\n");
+		send(sock,line,strlen(line),0);
+	
+		struct stat st;
+		stat(PAGE_404,&st);
+		int fd = open(PAGE_404,O_RDONLY);
+		sendfile(sock,fd,NULL,st.st_size);
+		close(fd);
+	}
+
 void echoError(int sock,int status_code)
 {
 	switch(status_code)
 	{
-		case 404:
+		case 400:
 			//show_404;
+			break;
+		case 403:
+			break;
+		case 404:
+			show_404(sock);
+			break;
+		case 500:
+			break;
+		case 503:
 			break;
 defalt:
 			break;
@@ -131,7 +156,7 @@ int exe_cgi(int sock,char *method,char *path,char *query_string)
 							}
 			 }while(strcmp(line,"\n"));
 			if(content_length == -1){
-				return 404;
+				return 400;
 				}
 			}
 			int input[2];//child 角度
@@ -143,7 +168,7 @@ int exe_cgi(int sock,char *method,char *path,char *query_string)
 			//zhi xing path
 			pid_t id = fork();
 			if(id<0){
-				return 404;
+				return 503;
 				}else if(id==0){
 					//child
 					close(input[1]);
@@ -153,7 +178,7 @@ int exe_cgi(int sock,char *method,char *path,char *query_string)
 					putenv(method_env);
 				
 					if(strcasecmp(method,"GET")==0){
-						sprintf(query_string_env,"QUERY_STRING",query_string);
+						sprintf(query_string_env,"QUERY_STRING=%s",query_string);
 						putenv(query_string_env);
 					}else{
 							sprintf(content_length_env,"CONTENT_LENGTH=%d",content_length);
@@ -188,7 +213,7 @@ int exe_cgi(int sock,char *method,char *path,char *query_string)
 						
 						while(read(output[0],&c,1)>0){
 							send(sock,&c,1,0);
-							}
+						}
 
 						waitpid(id,NULL,0);
 						close(input[1]);
@@ -231,7 +256,7 @@ if(strcasecmp(method,"GET")==0)
 		cgi=1;//POST fang fa bi xu yi cgi fang shi yun xing 
 	}else
 	{
-		status_code=404;
+		status_code=400;
 		clearHeader(sock);
 		goto end;
 	}
